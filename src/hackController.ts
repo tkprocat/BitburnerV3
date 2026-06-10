@@ -1,6 +1,6 @@
 import { NS } from "@ns";
 import { getTargetServers, getHostServers, getServerDetails, rootServers, getServers, pickScorer } from "./lib/servers";
-import { runTarget, newTargetState, TargetState } from "./lib/hacking";
+import { copyWorkerScripts, runTarget, newTargetState, TargetState } from "./lib/hacking";
 
 const LOOP_MS = 200;   // fine-grained so per-target batch spacing is honored
 
@@ -18,7 +18,7 @@ export async function main(ns: NS): Promise<void> {
     // Each target gets its own streaming lifecycle state (prep -> batch).
     const assignments: { host: string; target: string; state: TargetState }[] = [];
     for (let i = 0; i < Math.min(hosts.length, targets.length); i++) {
-        ns.scp(["hack.js", "weaken.js", "grow.js"], hosts[i].name);
+        copyWorkerScripts(ns, hosts[i].name);
         assignments.push({ host: hosts[i].name, target: targets[i].name, state: newTargetState() });
     }
     ns.print(`Assigned ${assignments.length} host->target pairs.`);

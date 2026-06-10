@@ -1,6 +1,6 @@
 import { NS } from "@ns";
 import { getServerDetails } from "./lib/servers";
-import { isPrepped, prepareServer, usableRam } from "./lib/hacking";
+import { copyWorkerScripts, isPrepped, prepareServer, usableRam, workerScripts } from "./lib/hacking";
 
 // Keep hacks small (5% of max money) so a single grow can comfortably restore the balance.
 const hackFraction = 0.05;
@@ -15,7 +15,7 @@ export async function main(ns: NS): Promise<void> {
     }
 
     ns.disableLog("ALL");
-    ns.scp(["weaken.js", "grow.js", "hack.js"], hostName);
+    copyWorkerScripts(ns, hostName);
 
     while (true) {
         const host = getServerDetails(ns, hostName);
@@ -28,10 +28,10 @@ export async function main(ns: NS): Promise<void> {
             continue;
         }
 
-        const availableThreads = Math.floor(usableRam(host) / ns.getScriptRam("hack.js"));
+        const availableThreads = Math.floor(usableRam(host) / ns.getScriptRam(workerScripts.hack));
         const neededThreads = Math.max(1, Math.ceil(hackFraction / ns.hackAnalyze(targetName)));
         if (availableThreads > 0) {
-            ns.exec("hack.js", hostName, Math.min(availableThreads, neededThreads), targetName);
+            ns.exec(workerScripts.hack, hostName, Math.min(availableThreads, neededThreads), targetName);
             await ns.sleep(target.hackTime + 100);
         } else {
             await ns.sleep(1000);

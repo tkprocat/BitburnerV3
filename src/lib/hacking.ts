@@ -9,6 +9,18 @@ export const batchSpacing = 4 * delayBuffer;  // ms between consecutive batches;
 export const driftSecThreshold = 5;      // re-prep if security climbs this far above min
 export const driftMoneyFloor = 0.5;      // re-prep if money falls below this fraction of max
 
+// Single source of truth for the worker script locations.
+export const workerScripts = {
+    hack: "workers/hack.js",
+    grow: "workers/grow.js",
+    weaken: "workers/weaken.js",
+} as const;
+
+/** Copy the hack/grow/weaken workers to a host so the controllers can exec them there. */
+export function copyWorkerScripts(ns: NS, host: string): boolean {
+    return ns.scp(Object.values(workerScripts), host);
+}
+
 /** RAM a host may spend, reserving a buffer on home for other scripts. */
 export function usableRam(host: ServerDetails): number {
     return host.name === "home"
@@ -24,18 +36,18 @@ export function usableRam(host: ServerDetails): number {
 export function prepareServer(ns: NS, host: ServerDetails, target: ServerDetails, log?: Logger): number {
     if (target.currentSecurityLevel > target.minSecurityLevel) {
         const wants = Math.ceil((target.currentSecurityLevel - target.minSecurityLevel) / ns.weakenAnalyze(1));
-        const threads = Math.min(wants, Math.floor(usableRam(host) / ns.getScriptRam("weaken.js")));
+        const threads = Math.min(wants, Math.floor(usableRam(host) / ns.getScriptRam(workerScripts.weaken)));
         log?.(`  PREP weaken want=${wants} run=${threads}`);
         if (threads > 0) {
-            ns.exec("weaken.js", host.name, threads, target.name);
+            ns.exec(workerScripts.weaken, host.name, threads, target.name);
             return ns.getWeakenTime(target.name);
         }
     } else if (target.currentMoney < target.maxMoney) {
         const wants = Math.ceil(ns.growthAnalyze(target.name, target.maxMoney / Math.max(1, target.currentMoney)));
-        const threads = Math.min(wants, Math.floor(usableRam(host) / ns.getScriptRam("grow.js")));
+        const threads = Math.min(wants, Math.floor(usableRam(host) / ns.getScriptRam(workerScripts.grow)));
         log?.(`  PREP grow want=${wants} run=${threads}`);
         if (threads > 0) {
-            ns.exec("grow.js", host.name, threads, target.name);
+            ns.exec(workerScripts.grow, host.name, threads, target.name);
             return ns.getGrowTime(target.name);
         }
     }
@@ -49,9 +61,9 @@ export function prepareServer(ns: NS, host: ServerDetails, target: ServerDetails
  * bail beforehand rather than run an incomplete cycle.
  */
 export function setUpHWGWCycle(ns: NS, host: ServerDetails, target: ServerDetails, log?: Logger): number {
-    const hackScriptRam = ns.getScriptRam("hack.js");
-    const weakenScriptRam = ns.getScriptRam("weaken.js");
-    const growScriptRam = ns.getScriptRam("grow.js");
+    const hackScriptRam = ns.getScriptRam(workerScripts.hack);
+    const weakenScriptRam = ns.getScriptRam(workerScripts.weaken);
+    const growScriptRam = ns.getScriptRam(workerScripts.grow);
 
     const hackTime = ns.getHackTime(target.name);
     const growTime = ns.getGrowTime(target.name);
@@ -105,10 +117,10 @@ export function setUpHWGWCycle(ns: NS, host: ServerDetails, target: ServerDetail
     // Whole batch fits -> fire all four. Landing time of each leg = cycleTime - N*delayBuffer.
     // Each leg is still guarded: a leg that needs 0 threads (e.g. nothing to grow) is just skipped,
     // since ns.exec rejects a 0 thread count.
-    if (hackThreads > 0) ns.exec("hack.js", host.name, hackThreads, target.name, cycleTime - hackTime - 3 * delayBuffer);
-    if (weakenThreads1 > 0) ns.exec("weaken.js", host.name, weakenThreads1, target.name, cycleTime - weakenTime - 2 * delayBuffer);
-    if (growThreads > 0) ns.exec("grow.js", host.name, growThreads, target.name, cycleTime - growTime - 1 * delayBuffer);
-    if (weakenThreads2 > 0) ns.exec("weaken.js", host.name, weakenThreads2, target.name, cycleTime - weakenTime);
+    if (hackThreads > 0) ns.exec(workerScripts.hack, host.name, hackThreads, target.name, cycleTime - hackTime - 3 * delayBuffer);
+    if (weakenThreads1 > 0) ns.exec(workerScripts.weaken, host.name, weakenThreads1, target.name, cycleTime - weakenTime - 2 * delayBuffer);
+    if (growThreads > 0) ns.exec(workerScripts.grow, host.name, growThreads, target.name, cycleTime - growTime - 1 * delayBuffer);
+    if (weakenThreads2 > 0) ns.exec(workerScripts.weaken, host.name, weakenThreads2, target.name, cycleTime - weakenTime);
 
     if (log) {
         log(`  HWGW H=${hackThreads} W1=${weakenThreads1} G=${growThreads} W2=${weakenThreads2} ` +

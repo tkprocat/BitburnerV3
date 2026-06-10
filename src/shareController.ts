@@ -1,7 +1,7 @@
 import { NS } from "@ns";
 import { getServers, rootServers } from "./lib/servers";
 
-const SHARE_SCRIPT = "share.js";
+const SHARE_SCRIPT = "workers/share.js";
 
 export async function main(ns: NS): Promise<void> {
     const flags = ns.flags([

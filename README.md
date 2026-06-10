@@ -22,7 +22,7 @@ Then in the game: Options -> Remote API -> enter the port `npm run watch` printe
 | `hackController.js` | Main HWGW batcher. Roots everything it can, pairs the biggest hosts with the best targets, then streams staggered hack/weaken/grow/weaken batches per target. |
 | `simpleHackController.js` | Single host/target loop: prep (weaken/grow) then hack. Early-game alternative to the batcher. `run simpleHackController.js <host> [target]` |
 | `debugHackController.js` | Verbose single-pair harness for diagnosing batch timing. Logs to tail and `debugHack.txt`. |
-| `hack.js` / `grow.js` / `weaken.js` | Minimal workers launched by the controllers. `run <script> <target> [delay]` |
+| `workers/hack.js` / `grow.js` / `weaken.js` | Minimal workers launched by the controllers. `run workers/<script> <target> [delay]` |
 | `nukeAll.js` | One-shot: open ports and nuke every server we can. |
 | `monitor.js` | Live money/security display for a target. `run monitor.js --hostname n00dles` |
 
@@ -32,7 +32,7 @@ Then in the game: Options -> Remote API -> enter the port `npm run watch` printe
 | --- | --- |
 | `gangController.js` | Recruits, equips, ascends and assigns tasks for a combat gang. `--focus auto\|respect\|money\|"territory warfare"` |
 | `privateServerController.js` | Buys cloud servers, then keeps doubling their RAM as money allows. |
-| `shareController.js` | Deploys `share.js` across all rooted servers for faction rep. `--force` kills running scripts first, `--include-home` uses home too. |
+| `shareController.js` | Deploys `workers/share.js` across all rooted servers for faction rep. `--force` kills running scripts first, `--include-home` uses home too. |
 | `connectTo.js` | Connects to any server by name (Singularity), or prints the manual `connect` path. `--list` shows paths to everything. |
 | `darkNetHack.js` | Authenticates to darknet servers, using heartbleed when the default password fails. |
 

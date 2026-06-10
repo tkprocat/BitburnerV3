@@ -5,9 +5,9 @@ export async function main(ns: NS): Promise<void> {
     const delay = Number(ns.args[1] || 0);
 
     if (!target) {
-        ns.tprint("Usage: run grow.js <target> [delay]");
+        ns.tprint("Usage: run workers/weaken.js <target> [delay]");
         return;
     }
 
-    await ns.grow(target, { additionalMsec: delay });
+    await ns.weaken(target, { additionalMsec: delay });
 }

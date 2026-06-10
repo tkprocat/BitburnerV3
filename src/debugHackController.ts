@@ -1,6 +1,6 @@
 import { NS } from "@ns";
 import { getServerDetails, rootServers } from "./lib/servers";
-import { runTarget, newTargetState, usableRam } from "./lib/hacking";
+import { copyWorkerScripts, runTarget, newTargetState, usableRam } from "./lib/hacking";
 import { fileLogger } from "./lib/logger";
 
 // Single-pair streaming harness for diagnosing batch timing, verbose, mirroring every line to a
@@ -21,7 +21,7 @@ export async function main(ns: NS): Promise<void> {
         ns.tprint(`No root on ${targetName} (need more port crackers). Aborting.`);
         return;
     }
-    ns.scp(["hack.js", "weaken.js", "grow.js"], hostName);
+    copyWorkerScripts(ns, hostName);
 
     const log = fileLogger(ns, LOG_FILE);
     const state = newTargetState();
