@@ -42,6 +42,7 @@ Then in the game: Options -> Remote API -> enter the port `npm run watch` printe
 - `hacking.ts` — HWGW batch sizing, server prep, per-target prep/batch lifecycle.
 - `gang.ts` — gang enums and helpers (equipment, members, recruit names, focus parsing).
 - `logger.ts` — tail/file logger used by the debug harness.
+- `ui.ts` — React UI building blocks (panels, stat rows, progress bars) for `ns.printRaw`, using the game's own React via `globalThis` (no 25GB `window`/`document` RAM penalty).
 
 ## Development
 

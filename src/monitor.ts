@@ -1,5 +1,13 @@
 import { NS } from "@ns";
-import { getServerDetails } from "./lib/servers";
+import { ServerDetails, getServerDetails } from "./lib/servers";
+import { UINode, colored, healthColor, panel, progressBar, statRow } from "./lib/ui";
+
+// How far above min security counts as "fully bad" when coloring the security display.
+const securityDisplayScale = 20;
+
+// Tail window size; fits the panel's six rows without scrollbars.
+const tailWidth = 480;
+const tailHeight = 210;
 
 export async function main(ns: NS): Promise<void> {
     const flags = ns.flags([
@@ -19,22 +27,40 @@ export async function main(ns: NS): Promise<void> {
     }
 
     ns.ui.openTail();
+    ns.ui.setTailTitle(`monitor: ${hostname}`);
+    ns.ui.resizeTail(tailWidth, tailHeight);
     ns.disableLog("ALL");
 
     while (true) {
-        const server = getServerDetails(ns, hostname);
-        const money = Math.max(1, server.currentMoney);
-        const securityOverMin = server.currentSecurityLevel - server.minSecurityLevel;
-
         ns.clearLog();
-        ns.print(`${hostname}:`);
-        ns.print(` $_______: ${ns.format.number(money)} / ${ns.format.number(server.maxMoney)} (${(money / server.maxMoney * 100).toFixed(2)}%)`);
-        ns.print(` security: +${securityOverMin.toFixed(2)}`);
-        ns.print(` hack____: ${ns.format.time(server.hackTime)} (t=${Math.ceil(ns.hackAnalyzeThreads(hostname, money))})`);
-        ns.print(` grow____: ${ns.format.time(server.growTime)} (t=${Math.ceil(ns.growthAnalyze(hostname, server.maxMoney / money))})`);
-        ns.print(` weaken__: ${ns.format.time(server.weakenTime)} (t=${Math.ceil(securityOverMin / ns.weakenAnalyze(1))})`);
+        ns.printRaw(monitorView(ns, getServerDetails(ns, hostname)));
         await ns.sleep(refreshRate);
     }
+}
+
+function monitorView(ns: NS, server: ServerDetails): UINode {
+    const theme = ns.ui.getTheme();
+    const money = Math.max(1, server.currentMoney);
+    const moneyFraction = money / server.maxMoney;
+    const securityOverMin = server.currentSecurityLevel - server.minSecurityLevel;
+    const securityFraction = securityOverMin / securityDisplayScale;
+    const securityColor = healthColor(1 - securityFraction);
+
+    const hackThreads = Math.ceil(ns.hackAnalyzeThreads(server.name, money));
+    const growThreads = Math.ceil(ns.growthAnalyze(server.name, server.maxMoney / money));
+    const weakenThreads = Math.ceil(securityOverMin / ns.weakenAnalyze(1));
+
+    return panel(server.name,
+        statRow("money",
+            progressBar(moneyFraction, theme.money),
+            colored(`${ns.format.number(money)} / ${ns.format.number(server.maxMoney)} (${(moneyFraction * 100).toFixed(2)}%)`, theme.money)),
+        statRow("security",
+            progressBar(securityFraction, securityColor),
+            colored(`+${securityOverMin.toFixed(2)}`, securityColor)),
+        statRow("hack", `${ns.format.time(server.hackTime)} (t=${hackThreads})`),
+        statRow("grow", `${ns.format.time(server.growTime)} (t=${growThreads})`),
+        statRow("weaken", `${ns.format.time(server.weakenTime)} (t=${weakenThreads})`),
+    );
 }
 
 export function autocomplete(data: { servers: string[] }): string[] {
