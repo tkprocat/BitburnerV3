@@ -62,7 +62,8 @@ export function getGangMembers(ns: NS): GangMember[] {
     }));
 }
 
-export function parseGangFocus(value: unknown): GangFocus {
+/** Parse a --focus flag value; null when unrecognized so callers can reject typos loudly. */
+export function parseGangFocus(value: unknown): GangFocus | null {
     const normalized = String(value).trim().toLowerCase();
 
     switch (normalized) {
@@ -75,8 +76,9 @@ export function parseGangFocus(value: unknown): GangFocus {
         case "warfare":
             return GangFocus.TerritoryWarfare;
         case GangFocus.Auto:
-        default:
             return GangFocus.Auto;
+        default:
+            return null;
     }
 }
 

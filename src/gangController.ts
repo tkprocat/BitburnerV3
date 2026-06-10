@@ -20,6 +20,10 @@ export async function main(ns: NS): Promise<void> {
     ]);
 
     const flagFocus = parseGangFocus(flags.focus);
+    if (flagFocus === null) {
+        ns.tprint(`Unknown focus "${flags.focus}". Valid values: ${Object.values(GangFocus).join(", ")}.`);
+        return;
+    }
 
     //Bail if we are not in a gang.
     if (!ns.gang.inGang()) {

@@ -31,10 +31,10 @@ Then in the game: Options -> Remote API -> enter the port `npm run watch` printe
 | Script | Description |
 | --- | --- |
 | `gangController.js` | Recruits, equips, ascends and assigns tasks for a combat gang. `--focus auto\|respect\|money\|"territory warfare"` |
-| `privateServerController.js` | Buys cloud servers, then keeps doubling their RAM as money allows. |
+| `cloudServerController.js` | Buys cloud servers, then keeps doubling their RAM as money allows. |
 | `shareController.js` | Deploys `workers/share.js` across all rooted servers for faction rep. `--force` kills running scripts first, `--include-home` uses home too. |
 | `connectTo.js` | Connects to any server by name (Singularity), or prints the manual `connect` path. `--list` shows paths to everything. |
-| `darkNetHack.js` | Authenticates to darknet servers, using heartbleed when the default password fails. |
+| `darknetHack.js` | Authenticates to darknet servers, using heartbleed when the default password fails. |
 
 ### Library (`src/lib`)
 
