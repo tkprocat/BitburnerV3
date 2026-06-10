@@ -5,7 +5,7 @@ export async function main(ns: NS): Promise<void> {
     const delay = Number(ns.args[1] || 0);
 
     if (!target) {
-        ns.tprint("Usage: run workers/weaken.js <target> [delay]");
+        ns.tprint(`Usage: run ${ns.getScriptName()} <target> [delay]`);
         return;
     }
 
