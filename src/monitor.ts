@@ -11,18 +11,18 @@ const tailHeight = 210;
 
 export async function main(ns: NS): Promise<void> {
     const flags = ns.flags([
-        ["hostname", ""],
         ["refreshrate", 200],
         ["help", false],
     ]);
-    const hostname = String(flags.hostname);
+    const positionalArgs = Array.isArray(flags._) ? flags._ : [];
+    const hostname = String(positionalArgs[0] ?? "");
     const refreshRate = Number(flags.refreshrate);
 
     if (!hostname || flags.help) {
         ns.tprint("This script helps visualize the money and security of a server.");
-        ns.tprint(`USAGE: run ${ns.getScriptName()} --hostname SERVER_NAME`);
+        ns.tprint(`USAGE: run ${ns.getScriptName()} SERVER_NAME [--refreshrate ms]`);
         ns.tprint("Example:");
-        ns.tprint(`> run ${ns.getScriptName()} --hostname n00dles`);
+        ns.tprint(`> run ${ns.getScriptName()} n00dles`);
         return;
     }
 

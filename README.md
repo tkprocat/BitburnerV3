@@ -24,7 +24,7 @@ Then in the game: Options -> Remote API -> enter the port `npm run watch` printe
 | `debugHackController.js` | Verbose single-pair harness for diagnosing batch timing. Logs to tail and `debugHack.txt`. |
 | `workers/hack.js` / `grow.js` / `weaken.js` | Minimal workers launched by the controllers. `run workers/<script> <target> [delay]` |
 | `nukeAll.js` | One-shot: open ports and nuke every server we can. |
-| `monitor.js` | Live money/security display for a target. `run monitor.js --hostname n00dles` |
+| `monitor.js` | Live money/security display for a target. `run monitor.js n00dles` |
 
 ### Other automation
 
