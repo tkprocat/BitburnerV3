@@ -3,3 +3,6 @@ dist/
 NetscriptDefinitions.d.ts
 .claude/
 *.log
+
+# Local debug/scratch scripts: synced to the game, never committed.
+src/scratch/
