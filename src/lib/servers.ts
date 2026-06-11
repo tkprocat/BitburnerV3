@@ -11,6 +11,7 @@ export interface ServerDetails {
     maxMoney: number;
     currentSecurityLevel: number;
     minSecurityLevel: number;
+    baseSecurityLevel: number;
     growthRate: number;
     hackTime: number;
     growTime: number;
@@ -27,8 +28,17 @@ export const scoreByMoney: ScoreStrategy = (ns, s) =>
 export const scoreByDifficulty: ScoreStrategy = (ns, s) =>
     ns.hackAnalyzeChance(s.name) * Math.sqrt(s.maxMoney) / s.weakenTime;
 
+// Hacking exp per thread scales with a server's BASE security (and weaken/grow always grant
+// it, success or not), so exp rate ~ base security over how fast ops cycle. The exact value
+// needs Formulas.exe (ns.formulas.hacking.hackExp); this ranks targets the same without it.
+export const scoreByExp: ScoreStrategy = (ns, s) =>
+    s.baseSecurityLevel / s.weakenTime;
+
 export function pickScorer(ns: NS): ScoreStrategy {
-    return ns.getHackingLevel() < 2000 ? scoreByDifficulty : scoreByMoney;
+    const hackingLevel = ns.getHackingLevel();
+    if (hackingLevel < 500) return scoreByExp;       // level fast first
+    if (hackingLevel < 2000) return scoreByDifficulty;
+    return scoreByMoney;
 }
 
 export function getServers(ns: NS, root = "home", servers = new Set<string>([root])): string[] {
@@ -56,6 +66,7 @@ export function getServerDetails(ns: NS, server: string): ServerDetails {
         maxMoney: info.moneyMax ?? 0,
         currentSecurityLevel: info.hackDifficulty ?? 0,
         minSecurityLevel: info.minDifficulty ?? 0,
+        baseSecurityLevel: info.baseDifficulty ?? 0,
         growthRate: info.serverGrowth ?? 0,
         hackTime: ns.getHackTime(server),
         growTime: ns.getGrowTime(server),
