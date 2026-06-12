@@ -29,29 +29,46 @@ export function usableRam(host: ServerDetails): number {
 }
 
 /**
- * Bring a target toward min security / max money, running the workers on `host`.
+ * Bring a target toward min security / max money, spreading one op's threads across `hosts`
+ * (biggest usable RAM first, taking only what the op needs so the rest stays available).
  * Returns how long (ms) the launched op will take, so the caller can avoid re-firing until it
  * lands; 0 if nothing was launched.
  */
-export function prepareServer(ns: NS, host: ServerDetails, target: ServerDetails, log?: Logger): number {
+export function prepareServerOnHosts(ns: NS, hosts: ServerDetails[], target: ServerDetails, log?: Logger): number {
+    let script: string;
+    let wants: number;
+    let opTime: number;
     if (target.currentSecurityLevel > target.minSecurityLevel) {
-        const wants = Math.ceil((target.currentSecurityLevel - target.minSecurityLevel) / ns.weakenAnalyze(1));
-        const threads = Math.min(wants, Math.floor(usableRam(host) / ns.getScriptRam(workerScripts.weaken)));
-        log?.(`  PREP weaken want=${wants} run=${threads}`);
-        if (threads > 0) {
-            ns.exec(workerScripts.weaken, host.name, threads, target.name);
-            return ns.getWeakenTime(target.name);
-        }
+        script = workerScripts.weaken;
+        wants = Math.ceil((target.currentSecurityLevel - target.minSecurityLevel) / ns.weakenAnalyze(1));
+        opTime = ns.getWeakenTime(target.name);
     } else if (target.currentMoney < target.maxMoney) {
-        const wants = Math.ceil(ns.growthAnalyze(target.name, target.maxMoney / Math.max(1, target.currentMoney)));
-        const threads = Math.min(wants, Math.floor(usableRam(host) / ns.getScriptRam(workerScripts.grow)));
-        log?.(`  PREP grow want=${wants} run=${threads}`);
-        if (threads > 0) {
-            ns.exec(workerScripts.grow, host.name, threads, target.name);
-            return ns.getGrowTime(target.name);
-        }
+        script = workerScripts.grow;
+        wants = Math.ceil(ns.growthAnalyze(target.name, target.maxMoney / Math.max(1, target.currentMoney)));
+        opTime = ns.getGrowTime(target.name);
+    } else {
+        return 0;
     }
-    return 0;
+
+    const scriptRam = ns.getScriptRam(script);
+    const pool = [...hosts].sort((a, b) => usableRam(b) - usableRam(a));
+    let remaining = wants;
+    for (const host of pool) {
+        if (remaining <= 0) break;
+        const threads = Math.min(remaining, Math.floor(usableRam(host) / scriptRam));
+        if (threads <= 0) continue;
+        ns.exec(script, host.name, threads, target.name);
+        log?.(`    ${host.name}: ${threads} threads`);
+        remaining -= threads;
+    }
+    const launched = wants - remaining;
+    log?.(`  PREP ${script === workerScripts.weaken ? "weaken" : "grow"} want=${wants} run=${launched} hosts=${pool.length}`);
+    return launched > 0 ? opTime : 0;
+}
+
+/** Single-host prep; see prepareServerOnHosts. */
+export function prepareServer(ns: NS, host: ServerDetails, target: ServerDetails, log?: Logger): number {
+    return prepareServerOnHosts(ns, [host], target, log);
 }
 
 /**
@@ -160,12 +177,14 @@ function hasDrifted(t: ServerDetails): boolean {
 /**
  * Advance one target's lifecycle. Call every loop tick; it no-ops until `state.nextFire`.
  * - PREP: fix the server one op at a time (waiting for each to land) until it's at baseline,
- *   then switch to BATCH.
+ *   then switch to BATCH. `supportHosts` (e.g. hosts left idle by the assignment) pitch in
+ *   so big preps don't crawl on a single host's RAM.
  * - BATCH: stream staggered batches every `batchSpacing`, trusting each to self-heal. Money is
  *   allowed to swing; only drop back to PREP if the server drifts beyond tolerance (real desync).
  *   RAM-full firings are skipped by setUpHWGWCycle and act as natural backpressure on depth.
+ *   Batches always run on `host` alone.
  */
-export function runTarget(ns: NS, host: ServerDetails, target: ServerDetails, state: TargetState, now: number, log?: Logger): void {
+export function runTarget(ns: NS, host: ServerDetails, target: ServerDetails, state: TargetState, now: number, log?: Logger, supportHosts: ServerDetails[] = []): void {
     if (now < state.nextFire) return;
 
     if (state.mode === "prep") {
@@ -173,7 +192,7 @@ export function runTarget(ns: NS, host: ServerDetails, target: ServerDetails, st
             state.mode = "batch";
             log?.(`${target.name}: prepped -> BATCHING`);
         } else {
-            const busy = prepareServer(ns, host, target, log);
+            const busy = prepareServerOnHosts(ns, [host, ...supportHosts], target, log);
             state.nextFire = now + (busy > 0 ? busy : 1000);   // wait for the op to land; retry soon if RAM-blocked
             return;
         }
