@@ -76,6 +76,8 @@ export function prepareServer(ns: NS, host: ServerDetails, target: ServerDetails
  * Atomic: every leg is sized at full strength, and the batch only fires if the whole thing
  * fits in the host's RAM. A partial batch (e.g. hack without grow) corrupts the target, so we
  * bail beforehand rather than run an incomplete cycle.
+ * Adaptive: starts at hackMoneyPercentage and halves the hack fraction until the batch fits,
+ * so a small host streams smaller batches instead of stalling forever on a too-big one.
  */
 export function setUpHWGWCycle(ns: NS, host: ServerDetails, target: ServerDetails, log?: Logger): number {
     const hackScriptRam = ns.getScriptRam(workerScripts.hack);
@@ -98,38 +100,66 @@ export function setUpHWGWCycle(ns: NS, host: ServerDetails, target: ServerDetail
     // the server's live money. hackAnalyzeThreads(maxMoney*pct) instead uses current money for
     // per-thread yield -> oversizes at low money -> over-hacks when it lands -> money death-spirals.
     const hackFraction = ns.hackAnalyze(target.name);
-    const hackThreads = Math.ceil(hackMoneyPercentage / hackFraction);
-    const weakenPerThread = ns.weakenAnalyze(1);
-    // Counter the security the hack adds. Omit the host arg (same cap gotcha as growthAnalyzeSecurity:
-    // with host it limits threads to "needed to hack max money"); uncapped gives the true increase.
-    const weakenThreads1 = Math.ceil(ns.hackAnalyzeSecurity(hackThreads) / weakenPerThread);
-    // Grow must undo the ACTUAL fraction the hack removes. ceil() on hackThreads pushes that a bit
-    // above hackMoneyPercentage, so sizing grow off the nominal 0.1 under-restores -> money ratchets
-    // down ~0.6%/cycle. Size off the real fraction (clamped <1 to keep the multiplier finite).
-    const actualHackPct = Math.min(0.99, hackThreads * hackFraction);
-    const growThreads = Math.ceil(ns.growthAnalyze(target.name, 1 / (1 - actualHackPct)));
-    // Counter the security the grow WILL add. NB: omit the host arg -- with it, growthAnalyzeSecurity
-    // CAPS the increase to "threads needed to reach max money", which is ~0 at our prepped baseline.
-    // But the grow runs AFTER the hack drops money, so it adds the FULL amount; size W2 off that.
-    const weakenThreads2 = growThreads > 0
-        ? Math.max(1, Math.ceil(ns.growthAnalyzeSecurity(growThreads) / weakenPerThread))
-        : 0;
-
-    if (hackThreads <= 0) {
-        log?.(`  HWGW skip: hackThreads=${hackThreads}`);
+    if (hackFraction <= 0) {
+        log?.(`  HWGW skip: hackFraction=${hackFraction}`);
         return 0;
     }
-
-    const totalRam = hackThreads * hackScriptRam
-        + weakenThreads1 * weakenScriptRam
-        + growThreads * growScriptRam
-        + weakenThreads2 * weakenScriptRam;
+    const weakenPerThread = ns.weakenAnalyze(1);
     const availableRam = usableRam(host);
 
-    if (totalRam > availableRam) {
-        log?.(`  HWGW skip: batch needs ${totalRam.toFixed(0)}GB, have ${availableRam.toFixed(0)}GB`);
-        return 0;
+    for (let percentage = hackMoneyPercentage; ; percentage /= 2) {
+        const hackThreads = Math.max(1, Math.ceil(percentage / hackFraction));
+        // Counter the security the hack adds. Omit the host arg (same cap gotcha as growthAnalyzeSecurity:
+        // with host it limits threads to "needed to hack max money"); uncapped gives the true increase.
+        const weakenThreads1 = Math.ceil(ns.hackAnalyzeSecurity(hackThreads) / weakenPerThread);
+        // Grow must undo the ACTUAL fraction the hack removes. ceil() on hackThreads pushes that a bit
+        // above the nominal percentage, so sizing grow off the nominal under-restores -> money ratchets
+        // down ~0.6%/cycle. Size off the real fraction (clamped <1 to keep the multiplier finite).
+        const actualHackPct = Math.min(0.99, hackThreads * hackFraction);
+        const growThreads = Math.ceil(ns.growthAnalyze(target.name, 1 / (1 - actualHackPct)));
+        // Counter the security the grow WILL add. NB: omit the host arg -- with it, growthAnalyzeSecurity
+        // CAPS the increase to "threads needed to reach max money", which is ~0 at our prepped baseline.
+        // But the grow runs AFTER the hack drops money, so it adds the FULL amount; size W2 off that.
+        const weakenThreads2 = growThreads > 0
+            ? Math.max(1, Math.ceil(ns.growthAnalyzeSecurity(growThreads) / weakenPerThread))
+            : 0;
+
+        const totalRam = hackThreads * hackScriptRam
+            + weakenThreads1 * weakenScriptRam
+            + growThreads * growScriptRam
+            + weakenThreads2 * weakenScriptRam;
+
+        if (totalRam > availableRam) {
+            if (hackThreads === 1) {
+                // Even the minimum possible batch doesn't fit; this pairing can't batch right now.
+                log?.(`  HWGW skip: minimal batch needs ${totalRam.toFixed(0)}GB, have ${availableRam.toFixed(0)}GB`);
+                return 0;
+            }
+            continue;   // halve the hack percentage and re-size
+        }
+
+        return fireHWGWBatch(ns, host, target, log, {
+            hackThreads, weakenThreads1, growThreads, weakenThreads2,
+            hackTime, growTime, weakenTime, cycleTime, totalRam, availableRam,
+        });
     }
+}
+
+interface HWGWBatch {
+    hackThreads: number;
+    weakenThreads1: number;
+    growThreads: number;
+    weakenThreads2: number;
+    hackTime: number;
+    growTime: number;
+    weakenTime: number;
+    cycleTime: number;
+    totalRam: number;
+    availableRam: number;
+}
+
+function fireHWGWBatch(ns: NS, host: ServerDetails, target: ServerDetails, log: Logger | undefined, batch: HWGWBatch): number {
+    const { hackThreads, weakenThreads1, growThreads, weakenThreads2, hackTime, growTime, weakenTime, cycleTime, totalRam, availableRam } = batch;
 
     // Whole batch fits -> fire all four. Landing time of each leg = cycleTime - N*delayBuffer.
     // Each leg is still guarded: a leg that needs 0 threads (e.g. nothing to grow) is just skipped,
